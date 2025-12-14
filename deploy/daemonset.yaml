@@ -20,6 +20,7 @@ spec:
           imagePullPolicy: IfNotPresent
           args:
             - --dry-run=true
+            - --sampler=smi
             - --idle-minutes=30
             - --sample-interval=60s
             - --consecutive-idle-samples=30
@@ -49,6 +50,9 @@ spec:
             - name: nvidia-driver
               mountPath: /run/nvidia/driver
               readOnly: true
+            - name: nvidia-smi
+              mountPath: /usr/bin/nvidia-smi
+              readOnly: true
       volumes:
         - name: run-containerd
           hostPath:
@@ -59,3 +63,7 @@ spec:
         - name: nvidia-driver
           hostPath:
             path: /run/nvidia/driver
+        - name: nvidia-smi
+          hostPath:
+            path: /usr/bin/nvidia-smi
+            type: File

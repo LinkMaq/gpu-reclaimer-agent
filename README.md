@@ -5,6 +5,9 @@
 ## 能做什么（当前阶段）
 
 - 周期性读取 NVML：每张 GPU 的利用率、显存、compute 进程 PID 列表
+
+> 说明：在少数环境里，NVML cgo 调用可能触发 `*** stack smashing detected ***`（通常与 driver/library 或 ABI 组合相关）。
+> 为了让原型先跑起来，本仓库支持采样后端切换为 `nvidia-smi`。
 - 将 NVML PID 归因到 Pod/容器（best-effort）：
   - 解析 `/proc/<pid>/cgroup` 提取 `podUID`、`containerID`
   - 若容器内存在 `crictl` 且可访问 CRI socket，则用 `crictl inspect` 补全 `namespace/name/containerName`
@@ -41,5 +44,6 @@ go build ./cmd/gpu-reclaimer-agent
 - `CONSECUTIVE_IDLE_SAMPLES` / `--consecutive-idle-samples`（默认 30）
 - `GPU_UTIL_THRESHOLD_PERCENT` / `--gpu-util-threshold`（默认 1）
 - `DRY_RUN` / `--dry-run`（默认 false；M1 阶段即使 false 也只会 dry-run）
+- `SAMPLER` / `--sampler`（默认 `nvml`；可选 `smi`）
 - `CRI_ENDPOINT` / `--cri-endpoint`（可选，供 `crictl -r` 使用）
 - `PROCESS_ALLOWLIST_REGEX`（默认忽略 `nvidia-persistenced` 等）

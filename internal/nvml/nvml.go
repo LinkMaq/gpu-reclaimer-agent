@@ -1,29 +1,15 @@
 package nvmlwrap
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/NVIDIA/go-nvml/pkg/nvml"
+
+	"gpu-reclaimer-agent/internal/sampling"
 )
 
-type GPUProcess struct {
-	PID       int
-	UsedBytes uint64
-}
-
-type GPUSnapshot struct {
-	Index         int
-	UUID          string
-	UtilGPU       uint32
-	UtilMem       uint32
-	MemUsedBytes  uint64
-	MemTotalBytes uint64
-	ComputeProcs  []GPUProcess
-}
-
-type Snapshot struct {
-	GPUs []GPUSnapshot
-}
+// Sampler implements sampling via NVML (go-nvml cgo bindings).
 
 type Client struct {
 	initialized bool
@@ -53,21 +39,29 @@ func (c *Client) Shutdown() {
 	c.initialized = false
 }
 
-func (c *Client) Sample() (Snapshot, error) {
+func (c *Client) Name() string { return "nvml" }
+
+func (c *Client) Close() error {
+	c.Shutdown()
+	return nil
+}
+
+func (c *Client) Sample(ctx context.Context) (sampling.Snapshot, error) {
+	_ = ctx
 	if err := c.Init(); err != nil {
-		return Snapshot{}, err
+		return sampling.Snapshot{}, err
 	}
 
 	count, ret := nvml.DeviceGetCount()
 	if ret != nvml.SUCCESS {
-		return Snapshot{}, fmt.Errorf("nvml device get count failed: %s", nvml.ErrorString(ret))
+		return sampling.Snapshot{}, fmt.Errorf("nvml device get count failed: %s", nvml.ErrorString(ret))
 	}
 
-	snap := Snapshot{GPUs: make([]GPUSnapshot, 0, count)}
+	snap := sampling.Snapshot{GPUs: make([]sampling.GPUSnapshot, 0, count)}
 	for i := 0; i < count; i++ {
 		dev, ret := nvml.DeviceGetHandleByIndex(i)
 		if ret != nvml.SUCCESS {
-			return Snapshot{}, fmt.Errorf("nvml get handle index=%d failed: %s", i, nvml.ErrorString(ret))
+			return sampling.Snapshot{}, fmt.Errorf("nvml get handle index=%d failed: %s", i, nvml.ErrorString(ret))
 		}
 
 		uuid, _ := dev.GetUUID()
@@ -75,12 +69,12 @@ func (c *Client) Sample() (Snapshot, error) {
 		memInfo, _ := dev.GetMemoryInfo()
 
 		procs, _ := dev.GetComputeRunningProcesses()
-		procList := make([]GPUProcess, 0, len(procs))
+		procList := make([]sampling.GPUProcess, 0, len(procs))
 		for _, p := range procs {
-			procList = append(procList, GPUProcess{PID: int(p.Pid), UsedBytes: p.UsedGpuMemory})
+			procList = append(procList, sampling.GPUProcess{PID: int(p.Pid), UsedBytes: p.UsedGpuMemory})
 		}
 
-		snap.GPUs = append(snap.GPUs, GPUSnapshot{
+		snap.GPUs = append(snap.GPUs, sampling.GPUSnapshot{
 			Index:         i,
 			UUID:          uuid,
 			UtilGPU:       util.Gpu,

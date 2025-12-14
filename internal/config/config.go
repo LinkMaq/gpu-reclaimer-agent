@@ -16,6 +16,8 @@ type Config struct {
 	MaxReclaimRetry        int
 	DryRun                 bool
 
+	Sampler string
+
 	CRIEndpoint string
 
 	// If set, only nodes with this label key/value are enabled. (M1 prototype: not enforced)
@@ -40,6 +42,7 @@ func FromEnvAndFlags(args []string) Config {
 		TermGraceSeconds:       envInt("TERM_GRACE_SECONDS", 15),
 		MaxReclaimRetry:        envInt("MAX_RECLAIM_RETRY", 2),
 		DryRun:                 envBool("DRY_RUN", false),
+		Sampler:                envString("SAMPLER", "nvml"),
 		CRIEndpoint:            os.Getenv("CRI_ENDPOINT"),
 		PodEnabledAnnotationKey: envString("POD_ENABLED_ANNOTATION_KEY", "gpu-reclaimer/enabled"),
 		PodEnabledDefault:       envBool("POD_ENABLED_DEFAULT", true),
@@ -51,6 +54,7 @@ func FromEnvAndFlags(args []string) Config {
 	fs.IntVar(&cfg.ConsecutiveIdleSamples, "consecutive-idle-samples", cfg.ConsecutiveIdleSamples, "Consecutive idle samples needed")
 	fs.IntVar(&cfg.GPUUtilThresholdPct, "gpu-util-threshold", cfg.GPUUtilThresholdPct, "GPU util threshold percent (util < threshold is idle)")
 	fs.BoolVar(&cfg.DryRun, "dry-run", cfg.DryRun, "Dry-run mode (no signals)")
+	fs.StringVar(&cfg.Sampler, "sampler", cfg.Sampler, "GPU sampling backend: nvml|smi")
 	fs.StringVar(&cfg.CRIEndpoint, "cri-endpoint", cfg.CRIEndpoint, "CRI runtime endpoint for crictl (optional)")
 	fs.StringVar(&cfg.PodEnabledAnnotationKey, "pod-enabled-annotation", cfg.PodEnabledAnnotationKey, "Pod annotation key used to enable/disable reclaim")
 	fs.BoolVar(&cfg.PodEnabledDefault, "pod-enabled-default", cfg.PodEnabledDefault, "Default pod enabled when annotation is absent")

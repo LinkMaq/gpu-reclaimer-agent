@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"regexp"
 	"sort"
+	"strings"
 	"time"
 
 	"gpu-reclaimer-agent/internal/attribution"
 	"gpu-reclaimer-agent/internal/config"
 	"gpu-reclaimer-agent/internal/idle"
 	"gpu-reclaimer-agent/internal/logging"
+	"gpu-reclaimer-agent/internal/sampling"
+	"gpu-reclaimer-agent/internal/smi"
 	nvmlwrap "gpu-reclaimer-agent/internal/nvml"
 )
 
@@ -24,7 +27,7 @@ type Agent struct {
 	cfg     config.Config
 	node    string
 	log     *logging.Logger
-	nvml    *nvmlwrap.Client
+	sampler sampling.Sampler
 	attrib  *attribution.Resolver
 	tracker *idle.Tracker
 
@@ -33,11 +36,18 @@ type Agent struct {
 
 func New(opts Options) *Agent {
 	allow := regexp.MustCompile(opts.Config.ProcessAllowlistRegex)
+	var sampler sampling.Sampler
+	switch strings.ToLower(strings.TrimSpace(opts.Config.Sampler)) {
+	case "smi", "nvidia-smi", "nvidiasmi":
+		sampler = smi.New("nvidia-smi")
+	default:
+		sampler = nvmlwrap.New()
+	}
 	return &Agent{
 		cfg:       opts.Config,
 		node:      opts.NodeName,
 		log:       opts.Logger,
-		nvml:      nvmlwrap.New(),
+		sampler:   sampler,
 		attrib:    attribution.NewResolver(opts.Config.CRIEndpoint),
 		tracker:   idle.NewTracker(opts.Config.IdleMinutes, opts.Config.ConsecutiveIdleSamples, opts.Config.SampleInterval),
 		allowlist: allow,
@@ -47,7 +57,9 @@ func New(opts Options) *Agent {
 func (a *Agent) Run(ctx context.Context) error {
 	ticker := time.NewTicker(a.cfg.SampleInterval)
 	defer ticker.Stop()
-	defer a.nvml.Shutdown()
+	defer func() { _ = a.sampler.Close() }()
+
+	a.log.Info(map[string]any{"msg": "gpu sampler selected", "node": a.node, "sampler": a.sampler.Name()})
 
 	// First sample immediately.
 	if err := a.tick(ctx); err != nil {
@@ -76,7 +88,7 @@ type podAgg struct {
 }
 
 func (a *Agent) tick(ctx context.Context) error {
-	snap, err := a.nvml.Sample()
+	snap, err := a.sampler.Sample(ctx)
 	if err != nil {
 		return err
 	}
@@ -200,9 +212,9 @@ func (a *Agent) tick(ctx context.Context) error {
 }
 
 func (a *Agent) validateCandidate(ctx context.Context, cand idle.Candidate) (bool, string, error) {
-	snap, err := a.nvml.Sample()
+	snap, err := a.sampler.Sample(ctx)
 	if err != nil {
-		return false, "nvml_resample_failed", err
+		return false, "resample_failed", err
 	}
 	gpuIdxSet := map[int]struct{}{}
 	for _, gi := range cand.Evidence.GPUs {
