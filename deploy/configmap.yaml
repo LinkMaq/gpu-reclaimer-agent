@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-reclaimer-agent-config
+  namespace: kube-system
+data:
+  IDLE_MINUTES: "30"
+  SAMPLE_INTERVAL_SECONDS: "60"
+  CONSECUTIVE_IDLE_SAMPLES: "30"
+  GPU_UTIL_THRESHOLD_PERCENT: "1"
+  DRY_RUN: "true"

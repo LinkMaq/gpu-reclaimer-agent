@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: gpu-reclaimer-agent
+  namespace: kube-system
+spec:
+  selector:
+    matchLabels:
+      app: gpu-reclaimer-agent
+  template:
+    metadata:
+      labels:
+        app: gpu-reclaimer-agent
+    spec:
+      hostPID: true
+      # 说明：是否需要 privileged / hostPath / RuntimeClass 取决于你的 NVIDIA 运行时接入方式。
+      containers:
+        - name: agent
+          image: your-registry/gpu-reclaimer-agent:dev
+          imagePullPolicy: IfNotPresent
+          args:
+            - --dry-run=true
+            - --idle-minutes=30
+            - --sample-interval=60s
+            - --consecutive-idle-samples=30
+            - --gpu-util-threshold=1
+          env:
+            # containerd 示例：
+            - name: CRI_ENDPOINT
+              value: unix:///run/containerd/containerd.sock
+            # 建议显式使用 GPU Operator 挂载的 driver root 来加载 NVML，避免 Driver/library version mismatch
+            - name: LD_LIBRARY_PATH
+              value: /run/nvidia/driver/usr/local/nvidia/lib64:/run/nvidia/driver/usr/lib/x86_64-linux-gnu:/run/nvidia/driver/usr/lib64
+            # 如果节点启用了 nvidia-container-runtime，这些 env 也有助于注入 utility 能力（不一定必须）
+            - name: NVIDIA_VISIBLE_DEVICES
+              value: all
+            - name: NVIDIA_DRIVER_CAPABILITIES
+              value: utility,compute
+          securityContext:
+            # M1 仅观测/归因，后续 kill 需要更高权限；这里先保守给特权，便于原型验证。
+            privileged: true
+          volumeMounts:
+            - name: run-containerd
+              mountPath: /run/containerd
+              readOnly: true
+            - name: dev
+              mountPath: /dev
+              readOnly: true
+            - name: nvidia-driver
+              mountPath: /run/nvidia/driver
+              readOnly: true
+      volumes:
+        - name: run-containerd
+          hostPath:
+            path: /run/containerd
+        - name: dev
+          hostPath:
+            path: /dev
+        - name: nvidia-driver
+          hostPath:
+            path: /run/nvidia/driver
